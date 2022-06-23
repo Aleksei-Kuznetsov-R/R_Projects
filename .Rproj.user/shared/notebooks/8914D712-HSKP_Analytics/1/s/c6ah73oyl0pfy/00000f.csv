@@ -1,0 +1,6 @@
+"0","#Transpose Months"
+"0","HSKP_final <- pivot_wider(HSKP,names_from = Month,"
+"0","                          values_from = FTE)"
+"2","Error in pivot_wider(HSKP, names_from = Month, values_from = FTE) : 
+  could not find function ""pivot_wider""
+"

@@ -1,0 +1,163 @@
+---
+title: "Hotel Maids Analysis"
+author: "performed by Aleksei Kuznetsov"
+date: '2022-06-20'
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(dplyr)
+options(dplyr.summarise.inform = FALSE)
+library(ggplot2)
+library(scales)
+library(glue)
+library(extrafont)
+loadfonts(device = "win")
+library (knitr)
+```
+
+# **Disclosure**
+
+It is vital for the hospitality industry to be able to do forecasting correctly. Forecasting can be in any aspect of the hotel industry. In this case, we will look at an example of calculating the number of staff at a group of hotels that will have a common payroll. This means that the staff will work in all hotels and will know each hotel's cleaning standards.
+
+## Goals
+
+The analysis should answer the following questions:
+
+1. How many personnel are needed between August and December?
+2. How many staff are needed for each hotel during the given period?
+3. Recommendations for the number of staff in a given period based on calculations
+
+## Data processing
+
+In order to perform analysis we are using two csv files :
+
+1.  Hotels_Revenue.csv
+    -   Rooms forecast from August till December
+2.  Rooms_sq.m..csv
+    -   Rooms by square meters that are split by category
+
+In order to be able to do the analysis, we first had to combine the two files into one and do some basic calculations.
+
+
+```{r data preperation}
+Hotel_Revenue <-read.csv2("Hotels_Revenue.csv",sep=";")
+Rooms_SQM2 <-read.csv2("Rooms_sq.m..csv",sep=";",)
+
+HSKP <- merge(Hotel_Revenue,Rooms_SQM2,by.x = c('ï..Hotel','Category'),by.y = c('ï..Hotel','Category'))
+
+HSKP$Days_in_Month <- as.numeric(as.character(HSKP$Days_in_Month))
+HSKP$Hotel_Invetory <- as.numeric(as.character(HSKP$Hotel_Invetory))
+HSKP$Total_Rooms <- as.numeric(as.character(HSKP$Total_Rooms))
+HSKP$Mediana <- as.numeric(as.character(HSKP$Mediana))
+HSKP$Fixed_Occ. <- as.numeric(as.character(HSKP$Fixed_Occ.))
+HSKP$Conf_of_Occ._per_Category <- as.numeric(as.character(HSKP$Conf_of_Occ._per_Category))
+
+names(HSKP)[10]<-'SQM'
+names(HSKP)[1]<-'Hotel'
+
+HSKP$Rooms_Sold <- round(HSKP[,6]*HSKP[,7]*HSKP[,5]*HSKP[,8],)
+HSKP$Rooms_Avaliable <- HSKP[,5]*HSKP[,7]
+HSKP$Category_Occ <- HSKP[,11]/HSKP[,12]
+HSKP$Sum_SQM <- HSKP[,11]*HSKP[,10]
+HSKP$SQM_per_day <- HSKP[,14]/HSKP[,5]
+```
+
+### Norm Calculation
+
+To calculate average time spent on every dirty room we need to use a predefined norm and calculate working Hours.
+
+_If norm changes or working hours, we can change formulas below._
+
+```{r norm, echo=TRUE}
+#NORM
+HSKP$Cleaning_Hours_per_day <- HSKP$SQM_per_day*40/min(HSKP$SQM)/60
+HSKP$FTE <-ceiling(HSKP$Cleaning_Hours_per_day/8)
+```
+
+## Maids Table
+
+As a result after all data manipulations, we get a Data Table with all necessary information about each hotel, each month and amount of Total FTE per Month. Last line *Total* is a summary of each column. Table format and presence in reporting is generated based on Owner request.
+
+```{r table, echo=FALSE}
+#Transpose Months
+HSKP_final <- pivot_wider(HSKP,names_from = Month,
+                          values_from = FTE)
+#Summary table
+HSKP_Report <-HSKP_final %>%
+  group_by (Hotel,Hotel_Description) %>%
+  summarize (sum(August,na.rm = TRUE),sum(September,na.rm = TRUE),sum(October,na.rm = TRUE),
+             sum(November,na.rm = TRUE),sum(December,na.rm = TRUE)) 
+
+names(HSKP_Report)[3]<-'August'
+names(HSKP_Report)[4]<-'September'
+names(HSKP_Report)[5]<-'October'
+names(HSKP_Report)[6]<-'November'
+names(HSKP_Report)[7]<-'December'
+
+#HSKP_Report is standard presentation table
+HSKP_Report [nrow(HSKP_Report)+1,] <- list("","Total",sum (HSKP_Report$August),sum(HSKP_Report$September),                                sum(HSKP_Report$October),sum(HSKP_Report$November),sum(HSKP_Report$December))
+
+#Rename and re-order the factor levels before the plot
+HSKP$Month <-factor(HSKP$Month,levels = c("December","November","October","September","August"),
+                    labels = c("DEC","NOV","OCT","SEP","AUG"))
+
+HSKP$Hotel <- paste(HSKP$Hotel,HSKP$Hotel_Description,sep=" ")
+
+kable(HSKP_Report)
+```
+
+## Recommendations
+
+In order to formulate recommendations based on the analysis, we built several bar plots in one. 
+
+* **Bar plot** - actually repeats the table earlier to show the maximum number of required personnel for the period
+* **Jitter plot** - shows the variation in the number of personnel for the period
+
+Both graphs clearly show that based on the sales plan by room category for a given period, most of the categories in a month do not require more than 5 people per day. There are also days when the number of personnel reaches 10-20 people per day for some hotels.
+
+
+```{r plot, echo=FALSE}
+
+HSKP %>%
+  ggplot()+
+  geom_col (aes(x=FTE,y=Month,fill=Hotel),
+            show.legend = FALSE)+
+  geom_jitter(aes(x=FTE,y=Month),
+              color = 'black',
+              stat = 'identity',
+              show.legend = FALSE,
+              position=position_jitter(seed=1),
+              )+
+  facet_wrap(~Hotel)+
+  labs(title = "FTE PER DAY ANALYSIS",
+       x=NULL,
+       y=NULL)+
+  theme_minimal()+
+  theme(text = element_text(family = 'serif'),
+        strip.text = element_text(face = 'bold',hjust = 0.25),
+        panel.grid.major = element_line('white',size=0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.ontop = TRUE)+
+        scale_x_continuous(limits = c(0,40), breaks = seq(0,40,by=5))
+```
+
+## Conclusion
+
+Due to the workload that the hotel sales department is planning, we can recommend hiring about 86 maids on staff and calling in the rest of the staff through outsourcing companies, as hiring all the staff on your own payroll will cost more than the outsourcing company. Provided that the outsourcing company's price is lower.
+
+```{r summary, echo=FALSE}
+F_Result <- tail(HSKP_Report,1)
+summary(unname(unlist(F_Result[-c(1,2)])))
+
+```
+
+## *Few words from Author*
+
+This report is designed to show the possibilities of working with R. In the form in which the Report is provided here, it is not its real appearance, which is presented in the company. In this case, the report is compiled solely to validate knowledge.

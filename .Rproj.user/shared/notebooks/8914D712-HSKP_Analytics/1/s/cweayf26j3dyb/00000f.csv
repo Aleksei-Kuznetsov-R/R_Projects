@@ -1,0 +1,3 @@
+"0","#NORM"
+"0","HSKP$Cleaning_Hours_per_day <- HSKP[,15]*40/min(HSKP$SQM)/60"
+"0","HSKP$FTE <-ceiling(HSKP[,16]/8)"
